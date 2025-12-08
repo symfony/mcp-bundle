@@ -16,6 +16,7 @@ use Mcp\Capability\Attribute\McpPrompt;
 use Mcp\Capability\Attribute\McpResource;
 use Mcp\Capability\Attribute\McpResourceTemplate;
 use Mcp\Capability\Attribute\McpTool;
+use Mcp\Capability\Registry\Loader\LoaderInterface;
 use Mcp\Server\Session\FileSessionStore;
 use Mcp\Server\Session\InMemorySessionStore;
 use Symfony\AI\McpBundle\Command\McpCommand;
@@ -57,6 +58,9 @@ final class McpBundle extends AbstractBundle
         $builder->setParameter('mcp.discovery.exclude_dirs', $config['discovery']['exclude_dirs']);
 
         $this->registerMcpAttributes($builder);
+
+        $builder->registerForAutoconfiguration(LoaderInterface::class)
+            ->addTag('mcp.loader');
 
         if ($builder->getParameter('kernel.debug')) {
             $traceableRegistry = (new Definition('mcp.traceable_registry'))

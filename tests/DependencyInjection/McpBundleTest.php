@@ -11,6 +11,7 @@
 
 namespace Symfony\AI\McpBundle\Tests\DependencyInjection;
 
+use Mcp\Capability\Registry\Loader\LoaderInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\AI\McpBundle\McpBundle;
@@ -347,6 +348,15 @@ class McpBundleTest extends TestCase
 
         $this->assertSame(['src'], $container->getParameter('mcp.discovery.scan_dirs'));
         $this->assertSame(['src/DataFixtures'], $container->getParameter('mcp.discovery.exclude_dirs'));
+    }
+
+    public function testLoaderInterfaceAutoconfiguration()
+    {
+        $container = $this->buildContainer([]);
+        $autoconfigured = $container->getAutoconfiguredInstanceof();
+        $this->assertArrayHasKey(LoaderInterface::class, $autoconfigured);
+        $definition = $autoconfigured[LoaderInterface::class];
+        $this->assertTrue($definition->hasTag('mcp.loader'));
     }
 
     private function buildContainer(array $configuration): ContainerBuilder

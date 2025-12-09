@@ -17,6 +17,8 @@ use Mcp\Capability\Attribute\McpResource;
 use Mcp\Capability\Attribute\McpResourceTemplate;
 use Mcp\Capability\Attribute\McpTool;
 use Mcp\Capability\Registry\Loader\LoaderInterface;
+use Mcp\Server\Handler\Notification\NotificationHandlerInterface;
+use Mcp\Server\Handler\Request\RequestHandlerInterface;
 use Mcp\Server\Session\FileSessionStore;
 use Mcp\Server\Session\InMemorySessionStore;
 use Symfony\AI\McpBundle\Command\McpCommand;
@@ -61,6 +63,12 @@ final class McpBundle extends AbstractBundle
 
         $builder->registerForAutoconfiguration(LoaderInterface::class)
             ->addTag('mcp.loader');
+
+        $builder->registerForAutoconfiguration(RequestHandlerInterface::class)
+            ->addTag('mcp.request_handler');
+
+        $builder->registerForAutoconfiguration(NotificationHandlerInterface::class)
+            ->addTag('mcp.notification_handler');
 
         if ($builder->getParameter('kernel.debug')) {
             $traceableRegistry = (new Definition('mcp.traceable_registry'))

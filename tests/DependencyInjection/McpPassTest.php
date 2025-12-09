@@ -138,37 +138,4 @@ final class McpPassTest extends TestCase
         $this->assertInstanceOf(Reference::class, $services['tool_service']->getValues()[0]);
         $this->assertInstanceOf(Reference::class, $services['prompt_service']->getValues()[0]);
     }
-
-    public function testInjectsLoadersIntoBuilder()
-    {
-        $container = new ContainerBuilder();
-        $container->setDefinition('mcp.server.builder', new Definition());
-
-        $container->setDefinition('loader_one', (new Definition())->addTag('mcp.loader'));
-        $container->setDefinition('loader_two', (new Definition())->addTag('mcp.loader'));
-
-        $pass = new McpPass();
-        $pass->process($container);
-
-        $builderDefinition = $container->getDefinition('mcp.server.builder');
-        $methodCalls = $builderDefinition->getMethodCalls();
-
-        $addLoadersCall = null;
-        foreach ($methodCalls as $call) {
-            if ('addLoaders' === $call[0]) {
-                $addLoadersCall = $call;
-                break;
-            }
-        }
-
-        $this->assertNotNull($addLoadersCall, 'Builder should have addLoaders method call');
-
-        // Verify arguments are References
-        $args = $addLoadersCall[1];
-        $this->assertContainsOnlyInstancesOf(Reference::class, $args);
-
-        $ids = array_map(fn (Reference $ref) => (string) $ref, $args);
-        $this->assertContains('loader_one', $ids);
-        $this->assertContains('loader_two', $ids);
-    }
 }

@@ -34,6 +34,9 @@ return static function (ContainerConfigurator $container): void {
             ->call('setEventDispatcher', [service('event_dispatcher')])
             ->call('setRegistry', [service('mcp.registry')])
             ->call('setSession', [service('mcp.session.store')])
+            ->call('addRequestHandlers', [tagged_iterator('mcp.request_handler')])
+            ->call('addNotificationHandlers', [tagged_iterator('mcp.notification_handler')])
+            ->call('addLoaders', [tagged_iterator('mcp.loader')])
             ->call('setDiscovery', [param('kernel.project_dir'), param('mcp.discovery.scan_dirs'), param('mcp.discovery.exclude_dirs')])
 
         ->set('mcp.server', Server::class)

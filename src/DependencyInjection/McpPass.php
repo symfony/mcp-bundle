@@ -27,13 +27,6 @@ final class McpPass implements CompilerPassInterface
             return;
         }
 
-        $definition = $container->getDefinition('mcp.server.builder');
-
-        $loaderReferences = $this->findAndSortTaggedServices('mcp.loader', $container);
-        if ([] !== $loaderReferences) {
-            $definition->addMethodCall('addLoaders', $loaderReferences);
-        }
-
         $allMcpServices = [];
         $mcpTags = ['mcp.tool', 'mcp.prompt', 'mcp.resource', 'mcp.resource_template'];
 
@@ -52,6 +45,6 @@ final class McpPass implements CompilerPassInterface
         }
 
         $serviceLocatorRef = ServiceLocatorTagPass::register($container, $serviceReferences);
-        $definition->addMethodCall('setContainer', [$serviceLocatorRef]);
+        $container->getDefinition('mcp.server.builder')->addMethodCall('setContainer', [$serviceLocatorRef]);
     }
 }

@@ -61,6 +61,8 @@ final class FrameworkSessionStore implements SessionStoreInterface
 
     public function destroy(Uuid $id): bool
     {
+        $this->handler->open('', 'mcp');
+
         return $this->handler->destroy($this->getKey($id));
     }
 

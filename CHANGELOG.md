@@ -14,6 +14,8 @@ CHANGELOG
  * Add `Symfony\AI\McpBundle\Client\McpClientInterface` (service `mcp.client.<name>`) and
    `Symfony\AI\McpBundle\Client\ServerConnectionInterface` (service `mcp.client.<name>.server.<server>`),
    which own the connection lifecycle: connecting on first use and disconnecting on kernel reset
+ * Add an argument alias per configured client, so `#[Target('<name>')] McpClientInterface $client`
+   injects the `mcp.client.<name>` service
  * Add `--clients` and `--client` options to `debug:mcp`, which now covers both sides of the bundle:
    the configured servers and what the configured clients reach
  * Add a `--server` option to `debug:mcp` and a server argument to `mcp:server`

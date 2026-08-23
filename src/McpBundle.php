@@ -167,7 +167,7 @@ final class McpBundle extends AbstractBundle
                 ->setArguments([$clientName, new Reference($locatorId)])
                 ->addTag('mcp.client', ['name' => $clientName]);
 
-            $container->registerAliasForArgument('mcp.client.'.$clientName, McpClientInterface::class, $clientName.' client');
+            $container->registerAliasForArgument('mcp.client.'.$clientName, McpClientInterface::class, $clientName);
 
             $clientReferences[$clientName] = new Reference('mcp.client.'.$clientName);
         }

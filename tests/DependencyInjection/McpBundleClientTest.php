@@ -211,7 +211,8 @@ final class McpBundleClientTest extends TestCase
             'research' => ['servers' => ['github' => ['transport' => 'http', 'url' => 'https://example.com/mcp']]],
         ]));
 
-        $this->assertSame('mcp.client.research', (string) $container->getAlias(McpClientInterface::class.' $researchClient'));
+        $this->assertSame('mcp.client.research', (string) $container->getAlias(McpClientInterface::class.' $research'));
+        $this->assertFalse($container->hasAlias(McpClientInterface::class.' $researchClient'));
         // A single client also answers a plain McpClientInterface type hint.
         $this->assertSame('mcp.client.research', (string) $container->getAlias(McpClientInterface::class));
     }

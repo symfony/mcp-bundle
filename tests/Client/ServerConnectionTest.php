@@ -12,6 +12,7 @@
 namespace Symfony\AI\McpBundle\Tests\Client;
 
 use Mcp\Client;
+use Mcp\Schema\PromptReference;
 use PHPUnit\Framework\TestCase;
 use Symfony\AI\McpBundle\Client\ServerConnection;
 use Symfony\AI\McpBundle\Exception\ConnectionException;
@@ -158,6 +159,20 @@ final class ServerConnectionTest extends TestCase
         $connection->reset();
 
         $this->assertFalse($connection->isConnected());
+    }
+
+    public function testCompleteForwardsTheReferenceAndArgument()
+    {
+        $transport = new InMemoryTransport(['completion/complete' => [
+            ['completion' => ['values' => ['berlin'], 'total' => 1, 'hasMore' => false]],
+        ]]);
+        $connection = $this->createConnection($transport);
+
+        $result = $connection->complete(new PromptReference('venue'), ['name' => 'city', 'value' => 'ber']);
+
+        $call = end($transport->sent);
+        $this->assertSame('completion/complete', $call['method']);
+        $this->assertSame(['berlin'], $result->values);
     }
 
     public function testNamesAreExposed()

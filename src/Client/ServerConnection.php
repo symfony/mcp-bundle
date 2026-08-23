@@ -16,7 +16,10 @@ use Mcp\Client\Transport\TransportInterface;
 use Mcp\Exception\ExceptionInterface as McpExceptionInterface;
 use Mcp\Schema\Enum\LoggingLevel;
 use Mcp\Schema\Implementation;
+use Mcp\Schema\PromptReference;
+use Mcp\Schema\ResourceReference;
 use Mcp\Schema\Result\CallToolResult;
+use Mcp\Schema\Result\CompletionCompleteResult;
 use Mcp\Schema\Result\GetPromptResult;
 use Mcp\Schema\Result\ListPromptsResult;
 use Mcp\Schema\Result\ListResourcesResult;
@@ -171,6 +174,11 @@ final class ServerConnection implements ServerConnectionInterface, ResetInterfac
     public function getPrompt(string $name, array $arguments = [], ?callable $onProgress = null): GetPromptResult
     {
         return $this->call('prompts/get', fn (): GetPromptResult => $this->client->getPrompt($name, $arguments, $onProgress));
+    }
+
+    public function complete(PromptReference|ResourceReference $ref, array $argument): CompletionCompleteResult
+    {
+        return $this->call('completion/complete', fn (): CompletionCompleteResult => $this->client->complete($ref, $argument));
     }
 
     public function setLoggingLevel(LoggingLevel $level): void

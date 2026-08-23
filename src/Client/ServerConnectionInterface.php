@@ -14,9 +14,12 @@ namespace Symfony\AI\McpBundle\Client;
 use Mcp\Schema\Enum\LoggingLevel;
 use Mcp\Schema\Implementation;
 use Mcp\Schema\Prompt;
+use Mcp\Schema\PromptReference;
 use Mcp\Schema\ResourceDefinition;
+use Mcp\Schema\ResourceReference;
 use Mcp\Schema\ResourceTemplate;
 use Mcp\Schema\Result\CallToolResult;
+use Mcp\Schema\Result\CompletionCompleteResult;
 use Mcp\Schema\Result\GetPromptResult;
 use Mcp\Schema\Result\ListPromptsResult;
 use Mcp\Schema\Result\ListResourcesResult;
@@ -104,6 +107,13 @@ interface ServerConnectionInterface
      * @param (callable(float $progress, ?float $total, ?string $message): void)|null $onProgress
      */
     public function getPrompt(string $name, array $arguments = [], ?callable $onProgress = null): GetPromptResult;
+
+    /**
+     * Ask the server to complete one argument of a prompt or resource template.
+     *
+     * @param array{name: string, value: string} $argument
+     */
+    public function complete(PromptReference|ResourceReference $ref, array $argument): CompletionCompleteResult;
 
     public function setLoggingLevel(LoggingLevel $level): void;
 }

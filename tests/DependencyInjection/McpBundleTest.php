@@ -30,6 +30,7 @@ use Mcp\Server\Stateless\StatelessProtocol;
 use Mcp\Server\Subscription\InMemoryNotificationBus;
 use Mcp\Server\Subscription\NotificationBusInterface;
 use Mcp\Server\Subscription\Psr16NotificationBus;
+use Mcp\Server\Subscription\PublishingEventDispatcher;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -750,6 +751,53 @@ class McpBundleTest extends TestCase
         // to surface as an unknown service rather than as a silently working cache.
         $this->assertSame('app.my_psr16', (string) $container->getDefinition('mcp.server.default.notification_bus')->getArgument('$cache'));
         $this->assertFalse($container->hasDefinition('app.my_psr16'));
+    }
+
+    public function testTheRegistryPublishesItsChangesToTheConfiguredBus()
+    {
+        $container = $this->buildContainer($this->config([
+            'modern' => ['subscriptions' => ['bus' => 'memory']],
+        ]));
+
+        $dispatcher = $container->getDefinition('mcp.server.modern.registry')->getArgument(0);
+
+        $this->assertInstanceOf(Definition::class, $dispatcher);
+        $this->assertSame(PublishingEventDispatcher::class, $dispatcher->getClass());
+        $this->assertSame('event_dispatcher', (string) $dispatcher->getArgument(1));
+    }
+
+    public function testTheRegistryPublishesToTheSameBusTheProtocolReads()
+    {
+        $container = $this->buildContainer($this->config([
+            'modern' => ['subscriptions' => ['bus' => 'memory']],
+        ]));
+
+        $published = (string) $container->getDefinition('mcp.server.modern.registry')->getArgument(0)->getArgument(0);
+        $read = $this->callsNamed($container, 'setNotificationBus', 'modern');
+
+        $this->assertCount(1, $read);
+        $this->assertSame('mcp.server.modern.notification_bus', $published);
+        $this->assertSame($published, (string) $read[0][1][0]);
+    }
+
+    public function testEachServerPublishesToItsOwnBus()
+    {
+        $container = $this->buildContainer($this->config([
+            'first' => ['subscriptions' => ['bus' => 'memory']],
+            'second' => ['subscriptions' => ['bus' => 'memory']],
+        ]));
+
+        $this->assertNotSame(
+            (string) $container->getDefinition('mcp.server.first.registry')->getArgument(0)->getArgument(0),
+            (string) $container->getDefinition('mcp.server.second.registry')->getArgument(0)->getArgument(0),
+        );
+    }
+
+    public function testTheRegistryUsesThePlainDispatcherWithoutSubscriptions()
+    {
+        $container = $this->buildContainer($this->config(['modern' => []]));
+
+        $this->assertSame('event_dispatcher', (string) $container->getDefinition('mcp.server.modern.registry')->getArgument(0));
     }
 
     public function testNoBusIsRegisteredWhenSubscriptionsAreOff()

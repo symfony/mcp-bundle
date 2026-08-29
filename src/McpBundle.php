@@ -39,6 +39,7 @@ use Mcp\Server\Session\Psr16SessionStore;
 use Mcp\Server\Subscription\InMemoryNotificationBus;
 use Mcp\Server\Subscription\NotificationBusInterface;
 use Mcp\Server\Subscription\Psr16NotificationBus;
+use Mcp\Server\Subscription\PublishingEventDispatcher;
 use Mcp\Server\Wire\CachePolicy;
 use Symfony\AI\McpBundle\App\McpAppRenderer;
 use Symfony\AI\McpBundle\Attribute\AsMcpApp;
@@ -358,7 +359,7 @@ final class McpBundle extends AbstractBundle
         $sessionId = $this->configureSessionStore($name, $server['session'], $container);
 
         $container->register($registryId, Registry::class)
-            ->setArguments([new Reference('event_dispatcher'), new Reference('logger')])
+            ->setArguments([$this->registryDispatcher($name, $server['subscriptions']), new Reference('logger')])
             ->addTag('monolog.logger', ['channel' => 'mcp']);
 
         $container->register($builderId, Builder::class)
@@ -489,7 +490,7 @@ final class McpBundle extends AbstractBundle
             $builder->addMethodCall('setCachePolicy', [$policy]);
         }
 
-        if ('none' !== $server['subscriptions']['bus']) {
+        if (self::publishesNotifications($server['subscriptions'])) {
             $builder
                 ->addMethodCall('setNotificationBus', [$this->notificationBus($name, $server['subscriptions'], $container)])
                 ->addMethodCall('setSubscriptionLifetime', [$server['subscriptions']['lifetime']]);
@@ -504,11 +505,51 @@ final class McpBundle extends AbstractBundle
     }
 
     /**
+     * One predicate for both halves, so the registry and the protocol cannot disagree about
+     * whether there is a bus.
+     *
+     * @param array{bus: string, cache_pool: string, lifetime: float} $subscriptions
+     */
+    private static function publishesNotifications(array $subscriptions): bool
+    {
+        return 'none' !== $subscriptions['bus'];
+    }
+
+    private static function notificationBusId(string $name): string
+    {
+        return \sprintf('mcp.server.%s.notification_bus', $name);
+    }
+
+    /**
+     * The dispatcher a server's registry announces its changes to.
+     *
+     * The SDK wraps the dispatcher in a {@see PublishingEventDispatcher} itself, but only around a
+     * registry it builds, and this bundle always supplies one — so without this the configured bus
+     * is read by every stream and written to by nothing.
+     *
+     * Per server, because the registries are per server.
+     *
+     * @param array{bus: string, cache_pool: string, lifetime: float} $subscriptions
+     */
+    private function registryDispatcher(string $name, array $subscriptions): Reference|Definition
+    {
+        if (!self::publishesNotifications($subscriptions)) {
+            return new Reference('event_dispatcher');
+        }
+
+        // By id: the bus is registered after this, and a forward reference resolves fine.
+        return new Definition(PublishingEventDispatcher::class, [
+            new Reference(self::notificationBusId($name)),
+            new Reference('event_dispatcher'),
+        ]);
+    }
+
+    /**
      * @param array{bus: string, cache_pool: string, lifetime: float} $subscriptions
      */
     private function notificationBus(string $name, array $subscriptions, ContainerBuilder $container): Reference
     {
-        $id = \sprintf('mcp.server.%s.notification_bus', $name);
+        $id = self::notificationBusId($name);
 
         if ('memory' === $subscriptions['bus']) {
             $container->register($id, InMemoryNotificationBus::class);
@@ -527,8 +568,8 @@ final class McpBundle extends AbstractBundle
                 ->addTag('monolog.logger', ['channel' => 'mcp']);
         }
 
-        // The SDK publishes registry changes itself; everything else — "notifications/resources/updated"
-        // above all — is the application calling publish(), so the bus has to be reachable.
+        // registryDispatcher() publishes the registry's own changes; everything else is the
+        // application calling publish(), so the bus has to be reachable.
         $container->registerAliasForArgument($id, NotificationBusInterface::class, $name.' notification bus');
 
         return new Reference($id);

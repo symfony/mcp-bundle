@@ -44,8 +44,11 @@ use Symfony\Component\Cache\Psr16Cache;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\ChildDefinition;
+use Symfony\Component\DependencyInjection\Compiler\MergeExtensionConfigurationPass;
+use Symfony\Component\DependencyInjection\Compiler\ValidateEnvPlaceholdersPass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
+use Symfony\Component\DependencyInjection\ParameterBag\EnvPlaceholderParameterBag;
 use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\EventDispatcher\EventDispatcher;
 
@@ -637,7 +640,7 @@ class McpBundleTest extends TestCase
 
     public function testAShortRequestStateKeyIsRejectedWhenTheContainerIsCompiled()
     {
-        $this->expectException(InvalidConfigurationException::class);
+        $this->expectException(LogicException::class);
         $this->expectExceptionMessageMatches('/must be at least 32 bytes/');
 
         $this->buildContainer($this->config(['modern' => ['request_state' => ['key' => 'too-short']]]));
@@ -646,9 +649,8 @@ class McpBundleTest extends TestCase
     public function testAnEnvPlaceholderKeyIsNotMeasured()
     {
         // Its length is unknowable at compile time, so the check must not turn a valid config
-        // into an error. Symfony also skips validation while handling a registered placeholder,
-        // but that only happens once the container's env machinery has run — the guard is what
-        // makes the rule hold everywhere, including here.
+        // into an error. Here the reference is still written as it was configured; the test below
+        // covers the other shape it takes, once a kernel's env machinery has registered it.
         $container = $this->buildContainer($this->config([
             'modern' => ['request_state' => ['key' => '%env(MCP_REQUEST_STATE_KEY)%']],
         ]));
@@ -657,6 +659,35 @@ class McpBundleTest extends TestCase
             [['%env(MCP_REQUEST_STATE_KEY)%', 600]],
             array_column($this->callsNamed($container, 'setRequestState', 'modern'), 1),
         );
+    }
+
+    public function testAnEnvPlaceholderKeySurvivesTheRealCompilationPath()
+    {
+        // The test above builds the container by hand, so the config component never learns it is
+        // handling a placeholder and the node's validator is simply reached and skipped. A kernel
+        // runs ValidateEnvPlaceholdersPass, which re-processes the configuration with the
+        // placeholder registered — and there cannotBeEmpty() on a validated node refuses every env
+        // variable outright, before the validator gets a say.
+        $container = new ContainerBuilder(new EnvPlaceholderParameterBag());
+        $container->setParameter('kernel.debug', true);
+        $container->setParameter('kernel.environment', 'test');
+        $container->setParameter('kernel.build_dir', 'public');
+        $container->setParameter('kernel.project_dir', '/path/to/project');
+
+        $container->registerExtension((new McpBundle())->getContainerExtension());
+        $container->prependExtensionConfig('mcp', $this->config([
+            'modern' => ['request_state' => ['key' => '%env(MCP_REQUEST_STATE_KEY)%']],
+        ])['mcp']);
+
+        (new MergeExtensionConfigurationPass(['mcp']))->process($container);
+        (new ValidateEnvPlaceholdersPass())->process($container);
+
+        // The placeholder has been swapped for the unique id the parameter bag resolves at
+        // runtime, so what is asserted is that the key arrived at all and still names the variable.
+        $calls = array_column($this->callsNamed($container, 'setRequestState', 'modern'), 1);
+        $this->assertCount(1, $calls);
+        $this->assertStringContainsString('MCP_REQUEST_STATE_KEY', $calls[0][0]);
+        $this->assertSame(600, $calls[0][1]);
     }
 
     public function testCacheHintsAreBuiltAsAPolicy()

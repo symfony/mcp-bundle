@@ -12,7 +12,6 @@
 namespace Symfony\Component\Config\Definition\Configurator;
 
 use Mcp\Schema\Enum\ProtocolVersion;
-use Mcp\Server\Stateless\RequestStateCodec;
 use Symfony\AI\McpBundle\McpBundle;
 use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
 
@@ -153,15 +152,7 @@ return static function (DefinitionConfigurator $configurator): void {
                             ->addDefaultsIfNotSet()
                             ->info('Signs the state a multi-round-trip answer carries through the client, which has no session to keep progress in. Required for a modern-era server whose handlers return an InputRequiredResult, and for one whose handlers call ClientGateway::elicit() more than once: the second ask has to carry the first answer to the next round.')
                             ->children()
-                                ->stringNode('key')->cannotBeEmpty()->defaultNull()->info('HMAC key, at least 32 bytes. The same value must reach every process that might serve the retry.')
-                                    ->validate()
-                                        // Only a literal is measurable: a container parameter is resolved before
-                                        // this runs, and an env one has no value until runtime, so it is skipped
-                                        // rather than measured as the placeholder string it still is here.
-                                        ->ifTrue(static fn (?string $v): bool => null !== $v && 1 !== preg_match('/^%[^%]+%$/', $v) && \strlen($v) < RequestStateCodec::MINIMUM_KEY_BYTES)
-                                        ->thenInvalid(\sprintf('The "request_state.key" must be at least %d bytes: below that the signature protecting the carried state is forgeable, and the SDK refuses it.', RequestStateCodec::MINIMUM_KEY_BYTES))
-                                    ->end()
-                                ->end()
+                                ->stringNode('key')->defaultNull()->info('HMAC key, at least 32 bytes. The same value must reach every process that might serve the retry.')->end()
                                 ->integerNode('ttl')->min(1)->defaultValue(600)->info('Seconds a minted state stays valid.')->end()
                             ->end()
                         ->end()

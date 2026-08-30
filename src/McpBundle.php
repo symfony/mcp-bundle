@@ -36,6 +36,7 @@ use Mcp\Server\Handler\Request\RequestHandlerInterface;
 use Mcp\Server\Session\FileSessionStore;
 use Mcp\Server\Session\InMemorySessionStore;
 use Mcp\Server\Session\Psr16SessionStore;
+use Mcp\Server\Stateless\RequestStateCodec;
 use Mcp\Server\Subscription\InMemoryNotificationBus;
 use Mcp\Server\Subscription\NotificationBusInterface;
 use Mcp\Server\Subscription\Psr16NotificationBus;
@@ -470,8 +471,12 @@ final class McpBundle extends AbstractBundle
     {
         $builder = $container->getDefinition($builderId);
 
-        if (null !== $server['request_state']['key']) {
-            $builder->addMethodCall('setRequestState', [$server['request_state']['key'], $server['request_state']['ttl']]);
+        if (null !== $key = $server['request_state']['key']) {
+            if (1 !== preg_match('/^%[^%]+%$/', $container->resolveEnvPlaceholders($key)) && \strlen($key) < RequestStateCodec::MINIMUM_KEY_BYTES) {
+                throw new LogicException(\sprintf('The "request_state.key" of server "%s" must be at least %d bytes, got %d: below that the signature protecting the carried state is forgeable, and the SDK refuses it.', $name, RequestStateCodec::MINIMUM_KEY_BYTES, \strlen($key)));
+            }
+
+            $builder->addMethodCall('setRequestState', [$key, $server['request_state']['ttl']]);
         }
 
         // "private, immediately stale" is what the SDK does without a policy, so only a

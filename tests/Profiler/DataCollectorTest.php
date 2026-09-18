@@ -15,6 +15,7 @@ use Mcp\Capability\Registry;
 use Mcp\Server;
 use Mcp\Server\Builder;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\AbstractLogger;
 use Psr\Log\NullLogger;
 use Symfony\AI\McpBundle\Profiler\DataCollector;
 use Symfony\Component\DependencyInjection\ServiceLocator;
@@ -97,6 +98,37 @@ final class DataCollectorTest extends TestCase
         $this->assertSame(1, $dataCollector->getTotalCount());
     }
 
+    public function testTheCollectorsOwnBuildDoesNotLog()
+    {
+        $logger = new RecordingLogger();
+        $registry = new Registry(null, new NullLogger());
+        $builder = Server::builder()
+            ->setRegistry($registry)
+            ->setLogger($logger)
+            ->addTool([ToolFixture::class, 'greet'], 'greeting');
+
+        $this->createCollector($registry, $builder)->lateCollect();
+
+        $this->assertSame([], $logger->records);
+    }
+
+    public function testTheCollectorLeavesTheSharedBuildersLoggerInPlace()
+    {
+        $logger = new RecordingLogger();
+        $registry = new Registry(null, new NullLogger());
+        $builder = Server::builder()
+            ->setRegistry($registry)
+            ->setLogger($logger)
+            ->addTool([ToolFixture::class, 'greet'], 'greeting');
+
+        $this->createCollector($registry, $builder)->lateCollect();
+
+        // The builder survives the request in a worker, where the next MCP request still needs it.
+        $builder->build();
+
+        $this->assertNotSame([], $logger->records);
+    }
+
     private function createCollector(Registry $registry, ?Builder $builder = null): DataCollector
     {
         $builder ??= Server::builder()->setRegistry($registry);
@@ -105,6 +137,25 @@ final class DataCollectorTest extends TestCase
             new ServiceLocator(['default' => static fn (): Builder => $builder]),
             new ServiceLocator(['default' => static fn (): Registry => $registry]),
         );
+    }
+}
+
+class RecordingLogger extends AbstractLogger
+{
+    /**
+     * @var list<string>
+     */
+    public array $records = [];
+
+    /**
+     * Untyped $message so the signature fits psr/log 1 as well as 3.
+     *
+     * @param \Stringable|string   $message
+     * @param array<string, mixed> $context
+     */
+    public function log($level, $message, array $context = []): void
+    {
+        $this->records[] = $level.': '.$message;
     }
 }
 

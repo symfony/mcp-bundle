@@ -13,6 +13,7 @@ namespace Symfony\AI\McpBundle\Profiler;
 
 use Mcp\Capability\RegistryInterface;
 use Mcp\Server\Builder;
+use Psr\Log\NullLogger;
 use Symfony\Bundle\FrameworkBundle\DataCollector\AbstractDataCollector;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -48,9 +49,11 @@ final class DataCollector extends AbstractDataCollector implements LateDataColle
         $this->data = ['servers' => []];
 
         foreach (array_keys($this->registries->getProvidedServices()) as $server) {
-            // The registry is populated by the loaders when the server is built. Re-building on an MCP
-            // request is harmless: the same elements are registered again onto the shared registry.
-            $this->builders->get($server)->build();
+            // Rebuilding is safe, the null logger avoids profiler noise without hiding failures, and cloning prevents
+            // that logger change from leaking to later requests.
+            $builder = clone $this->builders->get($server);
+            $builder->setLogger(new NullLogger())->build();
+
             $registry = $this->registries->get($server);
 
             $tools = [];

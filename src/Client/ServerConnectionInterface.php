@@ -27,6 +27,7 @@ use Mcp\Schema\Result\ListResourcesResult;
 use Mcp\Schema\Result\ListResourceTemplatesResult;
 use Mcp\Schema\Result\ListToolsResult;
 use Mcp\Schema\Result\ReadResourceResult;
+use Mcp\Schema\ServerCapabilities;
 use Mcp\Schema\Tool;
 
 /**
@@ -64,6 +65,11 @@ interface ServerConnectionInterface
     public function getProtocolVersion(): ?ProtocolVersion;
 
     public function getInstructions(): ?string;
+
+    /**
+     * What the server declared it supports, from `initialize` or, on 2026-07-28, from `server/discover`.
+     */
+    public function getServerCapabilities(): ?ServerCapabilities;
 
     public function ping(): void;
 

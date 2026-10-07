@@ -27,6 +27,7 @@ use Mcp\Schema\Result\ListResourcesResult;
 use Mcp\Schema\Result\ListResourceTemplatesResult;
 use Mcp\Schema\Result\ListToolsResult;
 use Mcp\Schema\Result\ReadResourceResult;
+use Mcp\Schema\ServerCapabilities;
 use Symfony\AI\McpBundle\Exception\ConnectionException;
 use Symfony\AI\McpBundle\Exception\ExceptionInterface;
 use Symfony\AI\McpBundle\Exception\RemoteCallException;
@@ -122,6 +123,13 @@ final class ServerConnection implements ServerConnectionInterface, ResetInterfac
         $this->connect();
 
         return $this->client->getInstructions();
+    }
+
+    public function getServerCapabilities(): ?ServerCapabilities
+    {
+        $this->connect();
+
+        return $this->client->getServerCapabilities();
     }
 
     public function ping(): void

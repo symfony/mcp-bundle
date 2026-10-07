@@ -33,9 +33,11 @@ use Mcp\Server;
 use Mcp\Server\Builder;
 use Mcp\Server\Handler\Notification\NotificationHandlerInterface;
 use Mcp\Server\Handler\Request\RequestHandlerInterface;
+use Mcp\Server\Session\FileSessionLock;
 use Mcp\Server\Session\FileSessionStore;
 use Mcp\Server\Session\InMemorySessionStore;
 use Mcp\Server\Session\Psr16SessionStore;
+use Mcp\Server\Session\SymfonyLockSessionLock;
 use Mcp\Server\Stateless\RequestStateCodec;
 use Mcp\Server\Subscription\InMemoryNotificationBus;
 use Mcp\Server\Subscription\NotificationBusInterface;
@@ -384,6 +386,11 @@ final class McpBundle extends AbstractBundle
             ->addTag('mcp.server.builder', ['server' => $name])
             ->addTag('monolog.logger', ['channel' => 'mcp']);
 
+        if ($server['session']['lock']['enabled']) {
+            $container->getDefinition($builderId)
+                ->addMethodCall('setSessionLock', [new Reference($this->configureSessionLock($name, $server['session'], $container))]);
+        }
+
         $this->configureProtocolVersions($server['protocol_versions'], $builderId, $container);
         $this->configureModernEra($name, $server, $builderId, $container);
 
@@ -397,7 +404,7 @@ final class McpBundle extends AbstractBundle
         }
 
         $container->register(\sprintf('mcp.server.%s.middleware_factory', $name), MiddlewareFactory::class)
-            ->setArguments([$server['http']['allowed_hosts']]);
+            ->setArguments([$server['http']['allowed_hosts'], $server['http']['allowed_origins']]);
 
         $container->register(\sprintf('mcp.server.%s.controller', $name), McpController::class)
             ->setArguments([
@@ -707,9 +714,9 @@ final class McpBundle extends AbstractBundle
 
             $session = $server['session'];
             $key = match ($session['store']) {
-                'file' => 'file:'.($session['directory'] ?? '%kernel.cache_dir%/mcp-sessions/'.$name),
-                'cache' => 'cache:'.$session['cache_pool'].':'.($session['prefix'] ?? 'mcp-'.$name.'-'),
-                'framework' => 'framework:'.($session['prefix'] ?? 'mcp-'.$name.'-'),
+                'file' => 'file:'.$this->sessionDirectory($name, $session),
+                'cache' => 'cache:'.$session['cache_pool'].':'.$this->sessionPrefix($name, $session),
+                'framework' => 'framework:'.$this->sessionPrefix($name, $session),
                 default => null,
             };
 
@@ -794,12 +801,12 @@ final class McpBundle extends AbstractBundle
     }
 
     /**
-     * @param array{store: string, directory: string|null, cache_pool: string, prefix: string|null, ttl: int} $session
+     * @param array{store: string, directory: string|null, cache_pool: string, prefix: string|null, ttl: int, lock: array{enabled: bool, factory: string|null, timeout: float, ttl: float}} $session
      */
     private function configureSessionStore(string $name, array $session, ContainerBuilder $container): string
     {
         $id = \sprintf('mcp.server.%s.session.store', $name);
-        $prefix = $session['prefix'] ?? \sprintf('mcp-%s-', $name);
+        $prefix = $this->sessionPrefix($name, $session);
 
         if ('memory' === $session['store']) {
             $container->register($id, InMemorySessionStore::class)
@@ -825,8 +832,56 @@ final class McpBundle extends AbstractBundle
         }
 
         $container->register($id, FileSessionStore::class)
-            ->setArguments([$session['directory'] ?? '%kernel.cache_dir%/mcp-sessions/'.$name, $session['ttl']]);
+            ->setArguments([$this->sessionDirectory($name, $session), $session['ttl']]);
 
         return $id;
+    }
+
+    /**
+     * @param array{store: string, directory: string|null, cache_pool: string, prefix: string|null, ttl: int, lock: array{enabled: bool, factory: string|null, timeout: float, ttl: float}} $session
+     */
+    private function configureSessionLock(string $name, array $session, ContainerBuilder $container): string
+    {
+        $id = \sprintf('mcp.server.%s.session.lock', $name);
+
+        if (null !== $session['lock']['factory']) {
+            $container->register($id, SymfonyLockSessionLock::class)
+                ->setArguments([
+                    new Reference($session['lock']['factory']),
+                    $session['lock']['timeout'],
+                    $session['lock']['ttl'],
+                    $this->sessionPrefix($name, $session).'session-',
+                    new Reference('logger'),
+                ])
+                ->addTag('monolog.logger', ['channel' => 'mcp']);
+
+            return $id;
+        }
+
+        $container->register($id, FileSessionLock::class)
+            ->setArguments([
+                $this->sessionDirectory($name, $session),
+                $session['lock']['timeout'],
+                new Reference('logger'),
+            ])
+            ->addTag('monolog.logger', ['channel' => 'mcp']);
+
+        return $id;
+    }
+
+    /**
+     * @param array{directory: string|null, ...} $session
+     */
+    private function sessionDirectory(string $name, array $session): string
+    {
+        return $session['directory'] ?? '%kernel.cache_dir%/mcp-sessions/'.$name;
+    }
+
+    /**
+     * @param array{prefix: string|null, ...} $session
+     */
+    private function sessionPrefix(string $name, array $session): string
+    {
+        return $session['prefix'] ?? \sprintf('mcp-%s-', $name);
     }
 }

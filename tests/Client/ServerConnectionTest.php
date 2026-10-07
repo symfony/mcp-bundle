@@ -184,6 +184,22 @@ final class ServerConnectionTest extends TestCase
         $this->assertSame(ProtocolVersion::V2025_11_25, $connection->getProtocolVersion());
     }
 
+    public function testServerCapabilitiesComeFromTheHandshake()
+    {
+        $connection = $this->createConnection(new InMemoryTransport(['initialize' => [[
+            'protocolVersion' => '2025-11-25',
+            'capabilities' => ['tools' => ['listChanged' => true], 'completions' => []],
+            'serverInfo' => ['name' => 'test-server', 'version' => '1.0.0'],
+        ]]]));
+
+        $capabilities = $connection->getServerCapabilities();
+
+        $this->assertNotNull($capabilities);
+        $this->assertTrue($capabilities->toolsListChanged);
+        $this->assertTrue($capabilities->completions);
+        $this->assertFalse($capabilities->prompts);
+    }
+
     public function testRootsListChangedIsSentAsANotification()
     {
         $transport = new InMemoryTransport();

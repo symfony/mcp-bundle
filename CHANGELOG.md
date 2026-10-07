@@ -1,6 +1,14 @@
 CHANGELOG
 =========
 
+0.15
+----
+
+ * Add `getServerCapabilities()` on `ServerConnectionInterface`, returning what the remote server declared
+ * Add `servers.<name>.session.lock` to handle the concurrent requests of one session one after the other,
+   with a file lock next to the `file` store or a `LockFactory` service for any store
+ * Add `servers.<name>.http.allowed_origins` to accept cross-origin clients in the DNS rebinding protection
+
 0.13
 ----
 

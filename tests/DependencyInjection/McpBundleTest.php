@@ -22,9 +22,11 @@ use Mcp\Server;
 use Mcp\Server\Handler\Notification\NotificationHandlerInterface;
 use Mcp\Server\Handler\Request\RequestHandlerInterface;
 use Mcp\Server\Protocol;
+use Mcp\Server\Session\FileSessionLock;
 use Mcp\Server\Session\FileSessionStore;
 use Mcp\Server\Session\InMemorySessionStore;
 use Mcp\Server\Session\Psr16SessionStore;
+use Mcp\Server\Session\SymfonyLockSessionLock;
 use Mcp\Server\Stateless\RequestStateCodec;
 use Mcp\Server\Stateless\StatelessProtocol;
 use Mcp\Server\Subscription\InMemoryNotificationBus;
@@ -370,6 +372,23 @@ class McpBundleTest extends TestCase
 
         // No allowed hosts configured: keep the SDK default (localhost only).
         $this->assertNull($container->getDefinition('mcp.server.default.middleware_factory')->getArgument(0));
+        $this->assertSame([], $container->getDefinition('mcp.server.default.middleware_factory')->getArgument(1));
+    }
+
+    public function testDnsRebindingProtectionWithAllowedOrigins()
+    {
+        $container = $this->buildContainer($this->config(['default' => ['http' => ['allowed_origins' => ['http://localhost:6274']]]]));
+
+        $this->assertNull($container->getDefinition('mcp.server.default.middleware_factory')->getArgument(0));
+        $this->assertSame(['http://localhost:6274'], $container->getDefinition('mcp.server.default.middleware_factory')->getArgument(1));
+    }
+
+    public function testAllowedOriginsAreRejectedWithoutDnsRebindingProtection()
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('The "allowed_origins" option has no effect when "allowed_hosts" is false');
+
+        $this->buildContainer($this->config(['default' => ['http' => ['allowed_hosts' => false, 'allowed_origins' => ['https://app.example.com']]]]));
     }
 
     public function testDnsRebindingProtectionWithAllowedHosts()
@@ -458,6 +477,89 @@ class McpBundleTest extends TestCase
         $this->assertSame('session.handler', (string) $definition->getArgument(0));
         $this->assertSame('mcp-', $definition->getArgument(1));
         $this->assertSame(1800, $definition->getArgument(2));
+    }
+
+    public function testSessionLockIsOffByDefault()
+    {
+        $container = $this->buildContainer($this->config(['default' => []]));
+
+        $this->assertSame([], $this->callsNamed($container, 'setSessionLock'));
+        $this->assertFalse($container->hasDefinition('mcp.server.default.session.lock'));
+    }
+
+    public function testSessionLockSitsNextToTheFileStore()
+    {
+        $container = $this->buildContainer($this->config(['editors' => ['session' => [
+            'store' => 'file',
+            'lock' => ['timeout' => 5.0],
+        ]]]));
+
+        $this->assertSame('mcp.server.editors.session.lock', (string) $this->callsNamed($container, 'setSessionLock', 'editors')[0][1][0]);
+
+        $definition = $container->getDefinition('mcp.server.editors.session.lock');
+        $this->assertSame(FileSessionLock::class, $definition->getClass());
+        $this->assertSame('%kernel.cache_dir%/mcp-sessions/editors', $definition->getArgument(0));
+        $this->assertSame(5.0, $definition->getArgument(1));
+    }
+
+    public function testSessionLockUsesALockFactoryForASharedStore()
+    {
+        $container = $this->buildContainer($this->config(['editors' => ['session' => [
+            'store' => 'cache',
+            'lock' => ['factory' => 'lock.factory'],
+        ]]]));
+
+        $definition = $container->getDefinition('mcp.server.editors.session.lock');
+        $this->assertSame(SymfonyLockSessionLock::class, $definition->getClass());
+        $this->assertSame('lock.factory', (string) $definition->getArgument(0));
+        $this->assertSame(30.0, $definition->getArgument(1));
+        $this->assertSame(300.0, $definition->getArgument(2));
+        $this->assertSame('mcp-editors-session-', $definition->getArgument(3));
+        $this->assertSame('logger', (string) $definition->getArgument(4));
+        $this->assertSame([['channel' => 'mcp']], $definition->getTag('monolog.logger'));
+    }
+
+    public function testSessionLockFollowsTheSessionPrefixAndTtl()
+    {
+        $container = $this->buildContainer($this->config(['editors' => ['session' => [
+            'store' => 'framework',
+            'prefix' => 'acme-mcp-',
+            'lock' => ['factory' => 'lock.factory', 'ttl' => 900.0],
+        ]]]));
+
+        $definition = $container->getDefinition('mcp.server.editors.session.lock');
+        $this->assertSame(900.0, $definition->getArgument(2));
+        $this->assertSame('acme-mcp-session-', $definition->getArgument(3));
+    }
+
+    public function testSessionLockFollowsACustomFileStoreDirectory()
+    {
+        $container = $this->buildContainer($this->config(['editors' => ['session' => [
+            'store' => 'file',
+            'directory' => '/var/mcp/sessions',
+            'lock' => true,
+        ]]]));
+
+        $this->assertSame('/var/mcp/sessions', $container->getDefinition('mcp.server.editors.session.store')->getArgument(0));
+        $this->assertSame('/var/mcp/sessions', $container->getDefinition('mcp.server.editors.session.lock')->getArgument(0));
+    }
+
+    public function testSessionLockUsesTheFactoryForTheFileStore()
+    {
+        $container = $this->buildContainer($this->config(['editors' => ['session' => [
+            'store' => 'file',
+            'lock' => ['factory' => 'lock.factory'],
+        ]]]));
+
+        $this->assertSame(SymfonyLockSessionLock::class, $container->getDefinition('mcp.server.editors.session.lock')->getClass());
+    }
+
+    public function testSessionLockWithoutFactoryIsRejectedForASharedStore()
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('any other store needs a LockFactory service');
+
+        $this->buildContainer($this->config(['default' => ['session' => ['store' => 'cache', 'lock' => true]]]));
     }
 
     public function testNoDiscoveryMethodCallOnBuilder()
